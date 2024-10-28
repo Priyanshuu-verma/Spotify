@@ -71,50 +71,68 @@ const playmusic = (track, pause=false) => {
 }
 
 async function displayAlbums() {
-    let a = await fetch(`/songs/`);
-    let response = await a.text();
-    let div = document.createElement("div");
-    div.innerHTML = response;
-    let anchors = div.getElementsByTagName("a")
-    let cardContainer = document.querySelector(".cardContainer")
-    let array = Array.from(anchors)
-    for (let index = 0; index < array.length; index++) {
-        const e = array[index];
+    try {
+        // Fetch the list of folders in the songs directory
+        let response = await fetch(`https://api.github.com/repos/Priyanshuu-verma/Spotify/contents/songs/`);
+        let folders = await response.json();
 
+        let cardContainer = document.querySelector(".cardContainer");
+        cardContainer.innerHTML = ""; // Clear any previous content
 
-        if (e.href.includes("/songs/") && !e.href.includes(".htaccess")) {
-            console.log(e.href)
-            let folder = e.href.split("/").slice(-1)[0]
-            console.log(folder)
-            //Get the metadata of the folder
-            let a = await fetch(`/songs/${folder}/info.json`);
-            let response = await a.json();
-            console.log(response)
-            cardContainer.innerHTML = cardContainer.innerHTML + `<div data-folder="${folder}" class="card">
-                        <div class="play">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"
-                                color="#000000" fill="none">
-                                <path
-                                    d="M18.8906 12.846C18.5371 14.189 16.8667 15.138 13.5257 17.0361C10.296 18.8709 8.6812 19.7884 7.37983 19.4196C6.8418 19.2671 6.35159 18.9776 5.95624 18.5787C5 17.6139 5 15.7426 5 12C5 8.2574 5 6.3861 5.95624 5.42132C6.35159 5.02245 6.8418 4.73288 7.37983 4.58042C8.6812 4.21165 10.296 5.12907 13.5257 6.96393C16.8667 8.86197 18.5371 9.811 18.8906 11.154C19.0365 11.7084 19.0365 12.2916 18.8906 12.846Z"
-                                    stroke="currentColor" stroke-width="1.5" fill="#000000" stroke-linejoin="round" />
-                            </svg>
-                        </div>
-                        <img src="/songs/${folder}/cover.jpg" alt="">
-                        <h2>${response.title}</h2>
-                        <p>${response.description}</p>
-                    </div>`
+        // Iterate through each item in the fetched JSON array
+        for (let folder of folders) {
+            // Only process items that are directories (folders)
+            if (folder.type === "dir" && !folder.name.includes(".htaccess")) {
+                let folderName = folder.name;
+
+                try {
+                    // Fetch the metadata info.json for the folder
+                    let infoResponse = await fetch(`https://api.github.com/repos/Priyanshuu-verma/Spotify/contents/songs/${folderName}/info.json`);
+                    
+                    // Check if the info.json exists
+                    if (infoResponse.ok) {
+                        let info = await infoResponse.json();
+                        let metadata = JSON.parse(atob(info.content)); // Decode base64 JSON data
+                        
+                        // Create card for each album with metadata
+                        cardContainer.innerHTML += `
+                            <div data-folder="${folderName}" class="card">
+                                <div class="play">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" color="#000000" fill="none">
+                                        <path d="M18.8906 12.846C18.5371 14.189 16.8667 15.138 13.5257 17.0361C10.296 18.8709 8.6812 19.7884 7.37983 19.4196C6.8418 19.2671 6.35159 18.9776 5.95624 18.5787C5 17.6139 5 15.7426 5 12C5 8.2574 5 6.3861 5.95624 5.42132C6.35159 5.02245 6.8418 4.73288 7.37983 4.58042C8.6812 4.21165 10.296 5.12907 13.5257 6.96393C16.8667 8.86197 18.5371 9.811 18.8906 11.154C19.0365 11.7084 19.0365 12.2916 18.8906 12.846Z"
+                                            stroke="currentColor" stroke-width="1.5" fill="#000000" stroke-linejoin="round"/>
+                                    </svg>
+                                </div>
+                                <img src="/songs/${folderName}/cover.jpg" alt="${metadata.title}">
+                                <h2>${metadata.title}</h2>
+                                <p>${metadata.description}</p>
+                            </div>
+                        `;
+                    } else {
+                        console.warn(`info.json not found for folder: ${folderName}`);
+                    }
+                } catch (err) {
+                    console.error(`Error fetching metadata for ${folderName}:`, err);
+                }
+            }
         }
+
+        // Add click event to each card for playing music
+        document.querySelectorAll(".card").forEach(card => {
+            card.addEventListener("click", async () => {
+                let folderName = card.getAttribute("data-folder");
+                let songs = await getSongs(`songs/${folderName}`);
+                if (songs.length > 0) {
+                    playmusic(songs[0]);
+                }
+            });
+        });
+
+    } catch (err) {
+        console.error("Error fetching albums:", err);
     }
-
-    //Load the playlist whenever card is clicked
-    Array.from(document.getElementsByClassName("card")).forEach(e => {
-        e.addEventListener("click", async item => {
-            songs = await getSongs(`songs/${item.currentTarget.dataset.folder}`)
-            playmusic(songs[0])
-        })
-    })
-
 }
+
 
 async function main() {
     // Get the list of all the songs
